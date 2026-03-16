@@ -1,4 +1,5 @@
 import streamlit as st
+import time
 import pandas as pd
 from src.snowflake_client import get_cursor, run_query_df, execute
 from src.queries import (
@@ -25,6 +26,7 @@ from src.google_client import (
     get_slides_service,
     get_drive_service,
     copy_file,
+    share_file_with_user,
 )
 from src.report_helpers import (
     last_month_label,
@@ -192,16 +194,12 @@ if st.session_state.get("lookup_stage", 0) >= 2:
     user_name_input = st.text_input("Your Name (for slides attribution)", value=st.session_state.get("report_user_name", ""), key="user_name_input")
     st.session_state.report_user_name = user_name_input
 
-    btn_col1, btn_col2 = st.columns(2)
+    btn_col1, btn_col2, btn_col3 = st.columns(3)
     with btn_col1:
         run_analysis_btn = st.button("Run Analysis", type="primary", help="Start analysis (2-5 hours)")
     with btn_col2:
-        gen_sheet_slides_btn = st.button("Generate Sheet + Slides", help="After analysis is done")
-
-    btn_col3, btn_col4 = st.columns(2)
-    with btn_col3:
         run_analysis_sheet_btn = st.button("Run Analysis → Sheet", help="Start analysis, then generate sheet when done")
-    with btn_col4:
+    with btn_col3:
         run_analysis_sheet_slides_btn = st.button("Run Analysis → Sheet → Slides", help="Start analysis, then generate sheet + slides when done")
 
     def _build_scoped_df():
@@ -258,6 +256,19 @@ if st.session_state.get("lookup_stage", 0) >= 2:
         populate_google_sheet(cs, schema_name, sheet_id, gclient, progress_callback=sheet_progress)
         return sheet_id, sheet_url
 
+    def _share_outputs(sheet_id=None, slides_id=None, user_name="FinOps Team"):
+        shared = []
+        if sheet_id:
+            email = share_file_with_user(sheet_id, user_name)
+            if email:
+                shared.append(f"Sheet shared with {email}")
+        if slides_id:
+            email = share_file_with_user(slides_id, user_name)
+            if email:
+                shared.append(f"Slides shared with {email}")
+        if shared:
+            st.info(" | ".join(shared))
+
     def _generate_slides(sheet_id, schema_name, customer_name, name, progress_bar, pct_start=0.0, pct_end=1.0):
         progress_bar.progress(pct_start, text="Generating Google Slides...")
         sheets_service = get_sheets_service()
@@ -308,26 +319,6 @@ if st.session_state.get("lookup_stage", 0) >= 2:
             except Exception as e:
                 st.error(f"Error starting analysis: {e}")
 
-    if gen_sheet_slides_btn:
-        schema_name = st.session_state.schema_name
-        customer_name = schema_name.replace("_", " ").title()
-        name = user_name_input.strip() if user_name_input.strip() else "FinOps Team"
-        progress_bar = st.progress(0, text="Checking analysis status...")
-        try:
-            ready, total, missing = _check_analysis_ready(schema_name)
-            if ready < total:
-                st.warning(f"Analysis not complete: {ready}/{total} tables ready. Missing: {', '.join(missing)}")
-                st.info("Check the **Analysis Status** page and try again when all tables are ready.")
-                st.stop()
-            sheet_id, sheet_url = _generate_sheet(schema_name, customer_name, progress_bar, 0.05, 0.50)
-            _, slides_url = _generate_slides(sheet_id, schema_name, customer_name, name, progress_bar, 0.50, 0.95)
-            progress_bar.progress(1.0, text="Done!")
-            st.success("Sheet + Slides generated!")
-            _show_links(sheet_url, slides_url, schema_name)
-        except Exception as e:
-            st.error(f"Report generation error: {e}")
-            st.exception(e)
-
     if run_analysis_sheet_btn:
         schema_name = st.session_state.schema_name
         selected = _build_scoped_df()
@@ -336,11 +327,10 @@ if st.session_state.get("lookup_stage", 0) >= 2:
         else:
             try:
                 _start_analysis(schema_name, selected)
-                st.success(f"Analysis started for `FINOPS_OUTPUTS.{schema_name}`.")
-                st.info("When analysis completes, click **Continue: Generate Sheet** below (or refresh this page to check).")
                 st.session_state.pending_pipeline = "sheet"
                 st.session_state.pending_schema = schema_name
                 st.session_state.pending_user_name = user_name_input.strip() if user_name_input.strip() else "FinOps Team"
+                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -352,11 +342,10 @@ if st.session_state.get("lookup_stage", 0) >= 2:
         else:
             try:
                 _start_analysis(schema_name, selected)
-                st.success(f"Analysis started for `FINOPS_OUTPUTS.{schema_name}`.")
-                st.info("When analysis completes, click **Continue: Generate Sheet + Slides** below (or refresh this page to check).")
                 st.session_state.pending_pipeline = "sheet_slides"
                 st.session_state.pending_schema = schema_name
                 st.session_state.pending_user_name = user_name_input.strip() if user_name_input.strip() else "FinOps Team"
+                st.rerun()
             except Exception as e:
                 st.error(f"Error: {e}")
 
@@ -367,31 +356,39 @@ if st.session_state.get("lookup_stage", 0) >= 2:
         p_customer = p_schema.replace("_", " ").title()
 
         st.markdown("---")
-        st.subheader(f"Pending: {pending.replace('_', ' + ').title()} generation for `{p_schema}`")
+        pipeline_label = "Sheet" if pending == "sheet" else "Sheet + Slides"
+        st.subheader(f"Pipeline: {pipeline_label} generation for `{p_schema}`")
 
         ready, total, missing = _check_analysis_ready(p_schema)
         if ready < total:
-            st.warning(f"Analysis in progress: {ready}/{total} tables ready. Missing: {', '.join(missing)}")
-            st.info("Refresh this page to re-check, or monitor on the **Analysis Status** page.")
+            st.info(f"Analysis in progress: **{ready}/{total}** tables ready.")
+            if missing:
+                st.caption(f"Waiting for: {', '.join(missing)}")
+            status_placeholder = st.empty()
+            status_placeholder.warning("Auto-checking every 15 seconds...")
+            time.sleep(15)
+            st.rerun()
         else:
-            st.success(f"All {total} tables ready!")
-            label = "Continue: Generate Sheet" if pending == "sheet" else "Continue: Generate Sheet + Slides"
-            if st.button(label, type="primary"):
-                progress_bar = st.progress(0, text="Generating...")
-                try:
-                    if pending == "sheet":
-                        sheet_id, sheet_url = _generate_sheet(p_schema, p_customer, progress_bar, 0.05, 0.95)
-                        progress_bar.progress(1.0, text="Done!")
-                        st.success("Sheet generated!")
-                        _show_links(sheet_url=sheet_url, schema_name=p_schema)
-                    else:
-                        sheet_id, sheet_url = _generate_sheet(p_schema, p_customer, progress_bar, 0.05, 0.50)
-                        _, slides_url = _generate_slides(sheet_id, p_schema, p_customer, p_name, progress_bar, 0.50, 0.95)
-                        progress_bar.progress(1.0, text="Done!")
-                        st.success("Sheet + Slides generated!")
-                        _show_links(sheet_url=sheet_url, slides_url=slides_url, schema_name=p_schema)
-                    del st.session_state["pending_pipeline"]
-                    del st.session_state["pending_schema"]
-                except Exception as e:
-                    st.error(f"Error: {e}")
-                    st.exception(e)
+            st.success(f"All {total} tables ready! Generating {pipeline_label.lower()}...")
+            progress_bar = st.progress(0, text="Generating...")
+            try:
+                if pending == "sheet":
+                    sheet_id, sheet_url = _generate_sheet(p_schema, p_customer, progress_bar, 0.05, 0.95)
+                    progress_bar.progress(1.0, text="Done!")
+                    st.success("Sheet generated!")
+                    _share_outputs(sheet_id=sheet_id, user_name=p_name)
+                    _show_links(sheet_url=sheet_url, schema_name=p_schema)
+                else:
+                    sheet_id, sheet_url = _generate_sheet(p_schema, p_customer, progress_bar, 0.05, 0.50)
+                    slides_id, slides_url = _generate_slides(sheet_id, p_schema, p_customer, p_name, progress_bar, 0.50, 0.95)
+                    progress_bar.progress(1.0, text="Done!")
+                    st.success("Sheet + Slides generated!")
+                    _share_outputs(sheet_id=sheet_id, slides_id=slides_id, user_name=p_name)
+                    _show_links(sheet_url=sheet_url, slides_url=slides_url, schema_name=p_schema)
+                del st.session_state["pending_pipeline"]
+                del st.session_state["pending_schema"]
+            except Exception as e:
+                st.error(f"Error generating: {e}")
+                st.exception(e)
+                del st.session_state["pending_pipeline"]
+                del st.session_state["pending_schema"]

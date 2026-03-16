@@ -48,3 +48,18 @@ def copy_file(file_id, title, folder_id=None):
         fileId=file_id, body=body, supportsAllDrives=True
     ).execute()
     return copied["id"]
+
+
+def share_file_with_user(file_id, user_name, send_notification=True):
+    email = user_name.lower().replace(" ", ".") + "@snowflake.com"
+    drive = get_drive_service()
+    try:
+        drive.permissions().create(
+            fileId=file_id,
+            body={"type": "user", "role": "writer", "emailAddress": email},
+            supportsAllDrives=True,
+            sendNotificationEmail=send_notification,
+        ).execute()
+        return email
+    except Exception:
+        return None

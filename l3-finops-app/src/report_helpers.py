@@ -447,17 +447,5 @@ def generate_slides(slides_service, sheets_service, drive_service, presentation_
     except Exception:
         pass
 
-    progress("Sharing presentation...")
-    try:
-        email = user_name.lower().replace(" ", ".") + "@snowflake.com"
-        drive_service.permissions().create(
-            fileId=presentation_id,
-            body={"type": "user", "role": "writer", "emailAddress": email},
-            supportsAllDrives=True,
-            sendNotificationEmail=True,
-        ).execute()
-    except Exception:
-        pass
-
     progress("Done!")
     return f"https://docs.google.com/presentation/d/{presentation_id}/edit"
