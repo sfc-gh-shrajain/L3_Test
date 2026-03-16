@@ -1,0 +1,11 @@
+name: app_environment
+channels:
+  - snowflake
+dependencies:
+  - google-api-python-client=*
+  - google-auth=*
+  - google-auth-httplib2=*
+  - google-auth-oauthlib=*
+  - gspread=*
+  - gspread-dataframe=*
+  - python-dateutil=*
