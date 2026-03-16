@@ -173,6 +173,58 @@ def replace_chart_send_to_back(slides_service, presentation_id, slide_index, spr
     return False
 
 
+def replace_chart_actual_size(slides_service, presentation_id, slide_index, spreadsheet_id, chart_id, send_to_back=False):
+    presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
+    slide = presentation["slides"][slide_index]
+    for element in slide.get("pageElements", []):
+        if "sheetsChart" in element:
+            size = element.get("size")
+            transform = element.get("transform")
+            actual_width = int(size["width"]["magnitude"] * transform.get("scaleX", 1))
+            actual_height = int(size["height"]["magnitude"] * transform.get("scaleY", 1))
+            actual_size = {
+                "width": {"magnitude": actual_width, "unit": size["width"]["unit"]},
+                "height": {"magnitude": actual_height, "unit": size["height"]["unit"]},
+            }
+            clean_transform = {
+                "scaleX": 1.0,
+                "scaleY": 1.0,
+                "shearX": transform.get("shearX", 0),
+                "shearY": transform.get("shearY", 0),
+                "translateX": transform.get("translateX", 0),
+                "translateY": transform.get("translateY", 0),
+                "unit": transform.get("unit", "EMU"),
+            }
+            slides_service.presentations().batchUpdate(
+                presentationId=presentation_id,
+                body={"requests": [{"deleteObject": {"objectId": element["objectId"]}}]},
+            ).execute()
+            response = slides_service.presentations().batchUpdate(
+                presentationId=presentation_id,
+                body={"requests": [{"createSheetsChart": {
+                    "spreadsheetId": spreadsheet_id,
+                    "chartId": chart_id,
+                    "linkingMode": "LINKED",
+                    "elementProperties": {
+                        "pageObjectId": slide["objectId"],
+                        "size": actual_size,
+                        "transform": clean_transform,
+                    },
+                }}]},
+            ).execute()
+            if send_to_back:
+                new_chart_id = response["replies"][0]["createSheetsChart"]["objectId"]
+                slides_service.presentations().batchUpdate(
+                    presentationId=presentation_id,
+                    body={"requests": [{"updatePageElementsZOrder": {
+                        "pageElementObjectIds": [new_chart_id],
+                        "operation": "SEND_TO_BACK",
+                    }}]},
+                ).execute()
+            return True
+    return False
+
+
 def update_table_on_slide(slides_service, presentation_id, slide_index, table_data, safe_delete=False):
     presentation = slides_service.presentations().get(presentationId=presentation_id).execute()
     slide = presentation["slides"][slide_index]
@@ -308,7 +360,7 @@ def replace_text_placeholders(slides_service, presentation_id, replacements):
 
 
 def generate_slides(slides_service, sheets_service, drive_service, presentation_id, sheet_id, customer_name, user_name, progress_callback=None):
-    total_steps = 12
+    total_steps = 14
     step = 0
 
     def progress(msg):
@@ -365,10 +417,29 @@ def generate_slides(slides_service, sheets_service, drive_service, presentation_
     if table_data:
         update_table_on_slide(slides_service, presentation_id, 6, table_data)
 
+    progress("Updating Slide 8 (Serverless Bill)...")
+    chart_id = find_chart_id(sheets_service, sheet_id, "Serverless Bill", "Serverless Bill")
+    if chart_id:
+        replace_chart_actual_size(slides_service, presentation_id, 7, sheet_id, chart_id)
+
+    progress("Updating Slide 9 (Spend Percentages)...")
+    try:
+        spend_pcts = sheets_service.spreadsheets().values().get(
+            spreadsheetId=sheet_id, range="Monthly Spend!G38:I38"
+        ).execute().get("values", [[]])[0]
+        co_pct = spend_pcts[0] if len(spend_pcts) > 0 else ""
+        st_pct = spend_pcts[1] if len(spend_pcts) > 1 else ""
+        ot_pct = spend_pcts[2] if len(spend_pcts) > 2 else ""
+        replace_text_placeholders(slides_service, presentation_id, {
+            "<co>%": co_pct, "<st>%": st_pct, "<ot>%": ot_pct
+        })
+    except Exception:
+        pass
+
     progress("Updating Slide 13 (UEM Monthly)...")
     chart_id = find_chart_id(sheets_service, sheet_id, "UEM - All", "UEM - Monthly")
     if chart_id:
-        replace_chart_send_to_back(slides_service, presentation_id, 12, sheet_id, chart_id)
+        replace_chart_actual_size(slides_service, presentation_id, 12, sheet_id, chart_id, send_to_back=True)
     table_data = sheets_service.spreadsheets().values().get(
         spreadsheetId=sheet_id, range="UEM - All!B2:E16"
     ).execute().get("values", [])
