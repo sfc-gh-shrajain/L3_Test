@@ -12,8 +12,11 @@ def last_month_label():
     return last_day_prev_month.strftime("%b %Y")
 
 
-def run_and_write(cursor, spreadsheet, query, worksheet_name, include_header=False):
+def run_and_write(cursor, spreadsheet, query, worksheet_name, include_header=False, table_map=None):
     ws = spreadsheet.worksheet(worksheet_name)
+    if table_map:
+        from src.snowflake_client import rewrite_query
+        query = rewrite_query(query, table_map)
     cursor.execute(query)
     columns = [desc[0] for desc in cursor.description]
     data = cursor.fetchall()
@@ -23,11 +26,16 @@ def run_and_write(cursor, spreadsheet, query, worksheet_name, include_header=Fal
 
 
 def populate_google_sheet(cursor, schema_name, sheet_id, gclient, progress_callback=None):
-    from src.config import SESSION_VARIABLES
+    from src.snowflake_client import is_running_in_sis, build_table_map
 
-    cursor.execute(f"SET SCHEMA_NAME = '{schema_name}'")
-    for stmt in SESSION_VARIABLES:
-        cursor.execute(stmt)
+    table_map = None
+    if is_running_in_sis():
+        table_map = build_table_map(schema_name)
+    else:
+        from src.config import SESSION_VARIABLES
+        cursor.execute(f"SET SCHEMA_NAME = '{schema_name}'")
+        for stmt in SESSION_VARIABLES:
+            cursor.execute(stmt)
 
     spreadsheet = gclient.open_by_key(sheet_id)
 
@@ -56,7 +64,7 @@ def populate_google_sheet(cursor, schema_name, sheet_id, gclient, progress_callb
         if progress_callback:
             progress_callback(idx / total, f"Writing {worksheet_name}...")
         try:
-            run_and_write(cursor, spreadsheet, query_map[query_name], worksheet_name)
+            run_and_write(cursor, spreadsheet, query_map[query_name], worksheet_name, table_map=table_map)
         except Exception as e:
             if progress_callback:
                 progress_callback(idx / total, f"Warning: {worksheet_name} failed: {e}")

@@ -219,7 +219,6 @@ if st.session_state.get("lookup_stage", 0) >= 2:
 
     def _start_analysis(schema_name, selected):
         cs = get_cursor()
-        cs.execute(f"USE SCHEMA FINOPS_OUTPUTS.{schema_name}")
         from snowflake.connector.pandas_tools import write_pandas
         conn = cs.connection
         write_pandas(

@@ -1,6 +1,6 @@
 import streamlit as st
 import pandas as pd
-from src.snowflake_client import run_query_df, get_cursor, set_session_variables
+from src.snowflake_client import run_query_df, get_cursor, set_session_variables, is_running_in_sis, build_table_map, rewrite_query
 from src.queries import LIST_SCHEMAS, DBA_WH_DETAIL, DBA_TOP_QUERIES, DBA_ROCKS_SUMMARY
 
 st.set_page_config(page_title="DBA Action Report", page_icon="🔧", layout="wide")
@@ -27,13 +27,19 @@ except Exception as e:
     st.error(f"Failed to set session variables: {e}")
     st.stop()
 
+_sis = is_running_in_sis()
+
 @st.cache_data(ttl=300)
 def load_data(_schema):
     set_session_variables(_schema)
-    wh_df = run_query_df(DBA_WH_DETAIL)
-    queries_df = run_query_df(DBA_TOP_QUERIES)
+    tm = build_table_map(_schema) if _sis else None
+    wh_q = rewrite_query(DBA_WH_DETAIL, tm) if tm else DBA_WH_DETAIL
+    tq_q = rewrite_query(DBA_TOP_QUERIES, tm) if tm else DBA_TOP_QUERIES
+    wh_df = run_query_df(wh_q)
+    queries_df = run_query_df(tq_q)
     try:
-        rocks_df = run_query_df(DBA_ROCKS_SUMMARY)
+        rk_q = rewrite_query(DBA_ROCKS_SUMMARY, tm) if tm else DBA_ROCKS_SUMMARY
+        rocks_df = run_query_df(rk_q)
     except Exception:
         rocks_df = pd.DataFrame()
     return wh_df, queries_df, rocks_df

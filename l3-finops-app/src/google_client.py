@@ -1,3 +1,4 @@
+import os
 import gspread
 from google.oauth2.service_account import Credentials
 from googleapiclient.discovery import build
@@ -12,9 +13,16 @@ SCOPES = [
     "https://www.googleapis.com/auth/presentations",
 ]
 
+CREDENTIALS_FILENAME = "snowflake-corp-finops-analysis-0152d8301e98.json"
+
 
 def get_credentials():
-    return Credentials.from_service_account_file(GOOGLE_CREDENTIALS_FILE, scopes=SCOPES)
+    from src.snowflake_client import is_running_in_sis
+    if is_running_in_sis():
+        creds_path = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), CREDENTIALS_FILENAME)
+        return Credentials.from_service_account_file(creds_path, scopes=SCOPES)
+    else:
+        return Credentials.from_service_account_file(GOOGLE_CREDENTIALS_FILE, scopes=SCOPES)
 
 
 def get_gspread_client():

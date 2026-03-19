@@ -1,0 +1,14 @@
+name: sf_env
+channels:
+  - snowflake
+dependencies:
+  - streamlit
+  - snowflake-snowpark-python
+  - pandas
+  - gspread
+  - google-api-python-client
+  - google-auth
+  - google-auth-httplib2
+  - google-auth-oauthlib
+  - python-dateutil
+  - gspread-dataframe
