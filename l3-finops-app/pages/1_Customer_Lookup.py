@@ -11,6 +11,7 @@ from src.queries import (
     REVENUE_SUMMARY,
     CREATE_TASK,
     EXECUTE_TASK,
+    SUSPEND_TASK,
     LIST_TABLES_IN_SCHEMA,
 )
 from src.config import (
@@ -50,20 +51,13 @@ except Exception as e:
     st.error(f"Failed to load customer names: {e}")
     all_names = []
 
-search_term = st.text_input("Search Ultimate Parent Name", placeholder="Type to search (e.g. GEICO)")
-if search_term:
-    filtered = [n for n in all_names if search_term.upper() in str(n).upper()]
-else:
-    filtered = all_names
-
-customer_names = st.selectbox(
-    "Ultimate Parent Name",
-    filtered,
-    index=None,
-    help=f"Showing {len(filtered)} of {len(all_names)} customers",
-)
-
 with st.form("customer_lookup"):
+    customer_names = st.selectbox(
+        "Ultimate Parent Name",
+        all_names,
+        index=None,
+    )
+
     schema_customer_name = st.text_input("Customer Name (for schema)")
     schema_customer_name = schema_customer_name.replace(" ", "_").upper()
 
@@ -79,42 +73,37 @@ with st.form("customer_lookup"):
             st.session_state.ult_parent = customer_names
             st.session_state.schema_name = schema_customer_name
 
+
+@st.cache_resource
+def create_schema_and_get_revenue(schema_name, ult_parent):
+    cs = get_cursor()
+    ult_parent_escaped = ult_parent.replace("'", "''")
+    cs.execute(CREATE_SCHEMA_CLONE.format(schema=schema_name))
+    cs.execute(CREATE_ULT_SFDC_ACCOUNTS.format(schema=schema_name, ult_parent=ult_parent_escaped))
+    cs.execute(CREATE_SFDC_ACCOUNTS.format(schema=schema_name))
+    cs.execute(f"SELECT date_trunc('quarter', current_date())")
+    current_quarter_start = cs.fetchone()[0].strftime("%Y-%m-%d")
+    cs.execute(f"SELECT DATEADD('day',-1,DATE_TRUNC('month',CURRENT_DATE()))")
+    end_date = cs.fetchone()[0].strftime("%Y-%m-%d")
+    cs.execute(f"SELECT dateadd(year, -2, dateadd(month, -3, '{current_quarter_start}'::DATE))")
+    start_date = cs.fetchone()[0].strftime("%Y-%m-%d")
+    cs.execute(BILLING_TABLE.format(schema=schema_name, start_date=start_date, end_date=end_date))
+    cs.execute(REVENUE_SUMMARY.format(schema=schema_name))
+    columns = [desc[0] for desc in cs.description]
+    data = cs.fetchall()
+    return pd.DataFrame(data, columns=columns)
+
+
 if st.session_state.lookup_stage == 1:
     schema_name = st.session_state.schema_name
     ult_parent = st.session_state.ult_parent
 
     st.subheader("Step 2: Creating Schema & Looking Up Accounts")
-
     progress = st.progress(0, text="Cloning L3_TEMPLATE schema...")
 
     try:
-        cs = get_cursor()
-
-        progress.progress(0.1, text="Cloning schema...")
-        cs.execute(CREATE_SCHEMA_CLONE.format(schema=schema_name))
-
-        progress.progress(0.3, text="Creating ULT_SFDC_ACCOUNTS...")
-        ult_parent_escaped = ult_parent.replace("'", "''")
-        cs.execute(CREATE_ULT_SFDC_ACCOUNTS.format(schema=schema_name, ult_parent=ult_parent_escaped))
-
-        progress.progress(0.5, text="Creating SFDC_ACCOUNTS...")
-        cs.execute(CREATE_SFDC_ACCOUNTS.format(schema=schema_name))
-
-        progress.progress(0.7, text="Creating BILLING table...")
-        cs.execute(f"SELECT date_trunc('quarter', current_date())")
-        current_quarter_start = cs.fetchone()[0].strftime("%Y-%m-%d")
-        cs.execute(f"SELECT DATEADD('day',-1,DATE_TRUNC('month',CURRENT_DATE()))")
-        end_date = cs.fetchone()[0].strftime("%Y-%m-%d")
-        cs.execute(f"SELECT dateadd(year, -2, dateadd(month, -3, '{current_quarter_start}'::DATE))")
-        start_date = cs.fetchone()[0].strftime("%Y-%m-%d")
-        cs.execute(BILLING_TABLE.format(schema=schema_name, start_date=start_date, end_date=end_date))
-
-        progress.progress(0.9, text="Fetching revenue summary...")
-        cs.execute(REVENUE_SUMMARY.format(schema=schema_name))
-        columns = [desc[0] for desc in cs.description]
-        data = cs.fetchall()
-        revenue_df = pd.DataFrame(data, columns=columns)
-
+        progress.progress(0.3, text="Setting up schema and tables...")
+        revenue_df = create_schema_and_get_revenue(schema_name, ult_parent)
         progress.progress(1.0, text="Account lookup complete!")
         st.session_state.revenue_df = revenue_df
         st.session_state.lookup_stage = 2
@@ -132,21 +121,22 @@ if st.session_state.get("lookup_stage", 0) >= 2:
     bulk_select = st.multiselect("Select all accounts by SF Name", sf_names, help="Pick one or more SF Names to auto-check all their accounts")
 
     st.caption("Revenue filters apply within selected SF Names (or all accounts if none selected)")
-    rev_col1, rev_col2, rev_col3 = st.columns(3)
+    rev_col1, rev_col2, rev_col3 = st.columns([2, 1, 1])
     with rev_col1:
-        rev_filter_5k = st.button("Filter: revenue > $5,000")
+        rev_threshold = st.number_input("Filter: Last 3-Month Revenue >", min_value=0, value=0, step=100, format="%d")
     with rev_col2:
-        rev_filter_500 = st.button("Filter: revenue > $500")
+        st.write("")
+        st.write("")
+        rev_filter_btn = st.button("Apply Filter")
     with rev_col3:
+        st.write("")
+        st.write("")
         rev_clear = st.button("Clear all selections")
 
     in_scope = revenue_df["SF_NAME"].isin(bulk_select) if bulk_select else pd.Series([True] * len(revenue_df))
 
-    if rev_filter_5k:
-        st.session_state.account_selections = (in_scope & (revenue_df["TOTAL_REVENUE"] > 5000)).tolist()
-        st.session_state._prev_bulk = bulk_select
-    elif rev_filter_500:
-        st.session_state.account_selections = (in_scope & (revenue_df["TOTAL_REVENUE"] > 500)).tolist()
+    if rev_filter_btn:
+        st.session_state.account_selections = (in_scope & (revenue_df["LAST_3_MONTH_REVENUE"] > rev_threshold)).tolist()
         st.session_state._prev_bulk = bulk_select
     elif rev_clear:
         st.session_state.account_selections = [False] * len(revenue_df)
@@ -160,17 +150,20 @@ if st.session_state.get("lookup_stage", 0) >= 2:
 
     display_df = revenue_df.copy()
     display_df.insert(0, "Select Account", st.session_state.account_selections[:len(display_df)])
-
-    selected_count = sum(st.session_state.account_selections[:len(display_df)])
-    st.caption(f"{selected_count} of {len(display_df)} accounts selected")
+    display_df["TOTAL_REVENUE"] = display_df["TOTAL_REVENUE"].apply(lambda x: f"${x:,.0f}" if x is not None else "$0")
+    display_df["LAST_3_MONTH_REVENUE"] = display_df["LAST_3_MONTH_REVENUE"].apply(lambda x: f"${x:,.0f}" if x is not None else "$0")
 
     edited_df = st.data_editor(
         display_df,
-        column_config={"Select Account": st.column_config.CheckboxColumn("Select Account")},
+        column_config={
+            "Select Account": st.column_config.CheckboxColumn("Select Account"),
+        },
         hide_index=True,
         key="account_editor",
     )
     st.session_state.account_selections = edited_df["Select Account"].tolist()
+    selected_count = sum(st.session_state.account_selections[:len(display_df)])
+    st.caption(f"{selected_count} of {len(display_df)} accounts selected")
 
     st.markdown("**Select Analyses to Run:**")
     script_names = ["Warehouse Analysis", "Query Analysis", "Storage Analysis", "Other (Serverless + Copy)", "ROI", "Usage Context"]
@@ -252,7 +245,10 @@ if st.session_state.get("lookup_stage", 0) >= 2:
         def sheet_progress(pct, msg):
             progress_bar.progress(min(pct_start + pct * span, pct_end), text=f"Sheet: {msg}")
 
-        populate_google_sheet(cs, schema_name, sheet_id, gclient, progress_callback=sheet_progress)
+        failures = populate_google_sheet(cs, schema_name, sheet_id, gclient, progress_callback=sheet_progress)
+        if failures:
+            for ws, err in failures:
+                st.warning(f"Tab **{ws}** skipped: {err}")
         return sheet_id, sheet_url
 
     def _share_outputs(sheet_id=None, slides_id=None, user_name="FinOps Team"):
@@ -369,6 +365,10 @@ if st.session_state.get("lookup_stage", 0) >= 2:
             st.rerun()
         else:
             st.success(f"All {total} tables ready! Generating {pipeline_label.lower()}...")
+            try:
+                get_cursor().execute(SUSPEND_TASK.format(schema=p_schema))
+            except Exception:
+                pass
             progress_bar = st.progress(0, text="Generating...")
             try:
                 if pending == "sheet":

@@ -2,11 +2,11 @@
 set -euo pipefail
 
 # ──────────────────────────────────────────────────────────────
-# deploy.sh — Deploy L3 FinOps Streamlit app to Snowflake (SiS)
+# deploy_container.sh — Deploy L3 FinOps Streamlit app on SPCS
 #
 # Usage:
-#   ./deploy.sh TEST     # deploy to FINOPS_APPS.L3_TEST
-#   ./deploy.sh PROD     # deploy to FINOPS_APPS.L3_PROD
+#   ./deploy_container.sh TEST     # deploy to FINOPS_APPS.L3_TEST
+#   ./deploy_container.sh PROD     # deploy to FINOPS_APPS.L3_PROD
 # ──────────────────────────────────────────────────────────────
 
 ENV="${1:-}"
@@ -19,7 +19,7 @@ DATABASE="FINOPS_APPS"
 SCHEMA="L3_${ENV}"
 STAGE="L3_APP_STAGE"
 APP_NAME="L3_FINOPS_APP"
-WAREHOUSE="FINOPS_WH"
+COMPUTE_POOL="STREAMLIT_DEDICATED_POOL"
 ROLE="FINOPS_VALUE_ADVISORY_RL"
 CONNECTION="default"
 
@@ -34,6 +34,7 @@ echo "════════════════════════�
 echo "  Deploying L3 FinOps App → ${APP_FQN}"
 echo "  Stage: ${STAGE_PATH}"
 echo "  Role: ${ROLE}"
+echo "  Compute Pool: ${COMPUTE_POOL}"
 echo "═══════════════════════════════════════════════════"
 
 run_sql() {
@@ -53,6 +54,11 @@ snow stage copy \
 
 snow stage copy \
     "${SCRIPT_DIR}/environment.yml" \
+    "${STAGE_PATH}/" \
+    ${SNOW_OPTS} --overwrite
+
+snow stage copy \
+    "${SCRIPT_DIR}/pyproject.toml" \
     "${STAGE_PATH}/" \
     ${SNOW_OPTS} --overwrite
 
@@ -109,9 +115,8 @@ run_sql "LIST ${STAGE_PATH}/;"
 echo ""
 echo "Step 3: Creating Streamlit app..."
 
-run_sql "CREATE OR REPLACE STREAMLIT ${APP_FQN} FROM '${STAGE_PATH}' MAIN_FILE = 'streamlit_app.py';"
+run_sql "CREATE OR REPLACE STREAMLIT ${APP_FQN} FROM '${STAGE_PATH}' MAIN_FILE = 'streamlit_app.py' RUNTIME_NAME = 'SYSTEM\$ST_CONTAINER_RUNTIME_PY3_11' COMPUTE_POOL = ${COMPUTE_POOL} QUERY_WAREHOUSE = FINOPS_WH;"
 
-run_sql "ALTER STREAMLIT ${APP_FQN} SET QUERY_WAREHOUSE = '${WAREHOUSE}';"
 run_sql "ALTER STREAMLIT ${APP_FQN} SET TITLE = 'L3 FinOps Automation (${ENV})';"
 
 # ── Step 4: Set external access and secrets ────────────────────
@@ -121,19 +126,16 @@ echo "Step 4: Configuring external access and secrets..."
 run_sql "ALTER STREAMLIT ${APP_FQN} SET EXTERNAL_ACCESS_INTEGRATIONS = ('GOOGLE_APIS_ACCESS_INTEGRATION', 'GOOGLE_APIS_ACCESS', 'GDRIVE_SECRETS_INTEGRATION');" \
     || echo "  ⚠ External access setup failed — check integration permissions"
 
-# ── Step 5: Grant access (PROD only gets wider grants) ─────────
+# ── Step 5: Grant access ───────────────────────────────────────
 echo ""
 echo "Step 5: Setting permissions..."
 
 run_sql "GRANT USAGE ON STREAMLIT ${APP_FQN} TO ROLE ${ROLE};"
 
-if [[ "$ENV" == "PROD" ]]; then
-    echo "  PROD: Add additional GRANT statements here for other roles."
-fi
-
 echo ""
 echo "═══════════════════════════════════════════════════"
 echo "  Deployment complete!"
 echo "  App: ${APP_FQN}"
+echo "  Compute Pool: ${COMPUTE_POOL}"
 echo "  Open in Snowsight: Projects > Streamlit > ${APP_NAME}"
 echo "═══════════════════════════════════════════════════"

@@ -1,0 +1,20 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "l3-finops-app"
+version = "0.1.0"
+requires-python = ">=3.11"
+dependencies = [
+    "streamlit",
+    "snowflake-snowpark-python",
+    "pandas",
+    "gspread",
+    "google-api-python-client",
+    "google-auth",
+    "google-auth-httplib2",
+    "google-auth-oauthlib",
+    "python-dateutil",
+    "gspread-dataframe",
+]

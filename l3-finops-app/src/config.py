@@ -4,7 +4,7 @@ BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
 SNOWFLAKE_USER = "jozhang"
 SNOWFLAKE_ACCOUNT = "snowhouse"
-SNOWFLAKE_ROLE = "SALES_MODELING_RL"
+SNOWFLAKE_ROLE = "FINOPS_VALUE_ADVISORY_RL"
 SNOWFLAKE_WAREHOUSE = "FINOPS_WH"
 
 TEMPLATE_SHEET_ID = "1sVDgZnWcD9LM5e8_9ymYplL2izdlbWqgxYucBTc6b2A"

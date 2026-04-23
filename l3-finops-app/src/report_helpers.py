@@ -60,17 +60,23 @@ def populate_google_sheet(cursor, schema_name, sheet_id, gclient, progress_callb
     }
 
     total = len(Q.QUERY_TO_WORKSHEET)
+    failures = []
     for idx, (query_name, worksheet_name) in enumerate(Q.QUERY_TO_WORKSHEET):
         if progress_callback:
             progress_callback(idx / total, f"Writing {worksheet_name}...")
         try:
             run_and_write(cursor, spreadsheet, query_map[query_name], worksheet_name, table_map=table_map)
         except Exception as e:
-            if progress_callback:
-                progress_callback(idx / total, f"Warning: {worksheet_name} failed: {e}")
+            failures.append((worksheet_name, str(e)))
 
     if progress_callback:
-        progress_callback(1.0, "Sheet population complete")
+        if failures:
+            failed_tabs = ", ".join(f"{ws}: {err}" for ws, err in failures)
+            progress_callback(1.0, f"Sheet complete (warnings: {failed_tabs})")
+        else:
+            progress_callback(1.0, "Sheet population complete")
+
+    return failures
 
 
 def find_chart_id(sheets_service, spreadsheet_id, sheet_title, chart_title=None):
