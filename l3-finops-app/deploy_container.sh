@@ -123,7 +123,7 @@ run_sql "ALTER STREAMLIT ${APP_FQN} SET TITLE = 'L3 FinOps Automation (${ENV})';
 echo ""
 echo "Step 4: Configuring external access and secrets..."
 
-run_sql "ALTER STREAMLIT ${APP_FQN} SET EXTERNAL_ACCESS_INTEGRATIONS = ('GOOGLE_APIS_ACCESS_INTEGRATION', 'GOOGLE_APIS_ACCESS', 'GDRIVE_SECRETS_INTEGRATION');" \
+run_sql "ALTER STREAMLIT ${APP_FQN} SET EXTERNAL_ACCESS_INTEGRATIONS = ('GOOGLE_APIS_ACCESS_INTEGRATION', 'GOOGLE_APIS_ACCESS', 'PYPI_ACCESS_INTEGRATION');" \
     || echo "  ⚠ External access setup failed — check integration permissions"
 
 # ── Step 5: Grant access ───────────────────────────────────────

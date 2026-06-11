@@ -1,0 +1,28 @@
+definition_version: 2
+entities:
+  l3_prod:
+    type: streamlit
+    identifier:
+      name: L3_FINOPS_APP
+      database: FINOPS_APPS
+      schema: L3_PROD
+    query_warehouse: FINOPS_WH
+    runtime_name: SYSTEM$ST_CONTAINER_RUNTIME_PY3_11
+    compute_pool: STREAMLIT_DEDICATED_POOL
+    external_access_integrations:
+      - PYPI_ACCESS_INTEGRATION
+    main_file: streamlit_app.py
+    artifacts:
+      - streamlit_app.py
+      - pyproject.toml
+      - snowflake-corp-finops-analysis-0152d8301e98.json
+      - pages/1_Customer_Lookup.py
+      - pages/2_Analysis_Status.py
+      - pages/3_Report_Generation.py
+      - pages/4_DBA_Action_Report.py
+      - src/__init__.py
+      - src/config.py
+      - src/google_client.py
+      - src/queries.py
+      - src/report_helpers.py
+      - src/snowflake_client.py
