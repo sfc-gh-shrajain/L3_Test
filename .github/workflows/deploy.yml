@@ -34,7 +34,6 @@ jobs:
       - name: Install Snowflake CLI
         uses: snowflakedb/snowflake-cli-action@v2
         with:
-          cli-version: latest
           default-config-file-path: .snowflake/config.toml
 
       - name: Write Snowflake connection config
