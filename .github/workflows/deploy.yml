@@ -40,8 +40,8 @@ jobs:
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
-          mkdir -p .snowflake
-          cat > .snowflake/config.toml <<EOF
+          mkdir -p ~/.snowflake
+          cat > ~/.snowflake/config.toml <<EOF
           [connections.sfcogsops-snowhouse_aws_us_west_2]
           account = "${SNOWFLAKE_ACCOUNT}"
           user = "${SNOWFLAKE_USER}"
@@ -82,8 +82,8 @@ jobs:
           SNOWFLAKE_USER: ${{ secrets.SNOWFLAKE_USER }}
           SNOWFLAKE_PASSWORD: ${{ secrets.SNOWFLAKE_PASSWORD }}
         run: |
-          mkdir -p .snowflake
-          cat > .snowflake/config.toml <<EOF
+          mkdir -p ~/.snowflake
+          cat > ~/.snowflake/config.toml <<EOF
           [connections.sfcogsops-snowhouse_aws_us_west_2]
           account = "${SNOWFLAKE_ACCOUNT}"
           user = "${SNOWFLAKE_USER}"
