@@ -2,7 +2,7 @@ import os
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-SNOWFLAKE_USER = "jozhang"
+SNOWFLAKE_USER = "shrajain"
 SNOWFLAKE_ACCOUNT = "snowhouse"
 SNOWFLAKE_ROLE = "FINOPS_VALUE_ADVISORY_RL"
 SNOWFLAKE_WAREHOUSE = "FINOPS_WH"
