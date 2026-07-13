@@ -101,6 +101,9 @@ jobs:
           EOF
           chmod 0600 ~/.snowflake/config.toml
 
+      - name: Debug config
+        run: cat ~/.snowflake/config.toml | sed 's/password = .*/password = ***/'
+
       - name: Write Google credentials
         run: |
           echo '${{ secrets.GOOGLE_CREDENTIALS_JSON }}' \
