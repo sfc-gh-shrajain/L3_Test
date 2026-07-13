@@ -56,6 +56,7 @@ jobs:
           role = "FINOPS_VALUE_ADVISORY_RL"
           warehouse = "FINOPS_WH"
           EOF
+          chmod 0600 ~/.snowflake/config.toml
 
       - name: Deploy SQL to TEST
         if: github.event_name == 'pull_request'
@@ -98,6 +99,7 @@ jobs:
           role = "FINOPS_VALUE_ADVISORY_RL"
           warehouse = "FINOPS_WH"
           EOF
+          chmod 0600 ~/.snowflake/config.toml
 
       - name: Write Google credentials
         run: |
