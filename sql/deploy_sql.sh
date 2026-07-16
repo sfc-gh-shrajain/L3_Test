@@ -10,10 +10,9 @@
 # rewrites that prefix on the fly to the TARGET you choose.
 #
 # Usage:
-#   ./deploy.sh                             # deploy to FINOPS.L3_TEMPLATE (default)
-#   ./deploy.sh FINOPS.L3_TEMPLATE_TEST     # deploy to the test schema
-#   TARGET=FINOPS.L3_TEMPLATE_TEST ./deploy.sh
-#   CONNECTION=my_conn ./deploy.sh
+#   ./deploy_sql.sh TEST    # deploy to FINOPS.L3_TEMPLATE_TEST
+#   ./deploy_sql.sh PROD    # deploy to FINOPS.L3_TEMPLATE
+#   CONNECTION=my_conn ./deploy_sql.sh TEST
 #
 # Nothing is destructive beyond CREATE OR REPLACE on the objects in TARGET.
 # The TARGET schema must already exist.
@@ -21,8 +20,18 @@
 set -euo pipefail
 
 # --- Config (override via env or first arg) ---
-TARGET="${1:-${TARGET:-FINOPS.L3_TEMPLATE_TEST}}"   # default: live schema
-CONNECTION="${CONNECTION:-sfcogsops-snowhouse_aws_us_west_2}"
+ENV="${1:-}"
+if [[ "$ENV" == "TEST" ]]; then
+  TARGET="FINOPS.L3_TEMPLATE_TEST"
+elif [[ "$ENV" == "PROD" ]]; then
+  TARGET="FINOPS.L3_TEMPLATE"
+elif [[ -n "$ENV" ]]; then
+  TARGET="$ENV"  # allow passing full target directly
+else
+  echo "Usage: $0 [TEST|PROD]"
+  exit 1
+fi
+CONNECTION="${CONNECTION:-default}"
 SOURCE_PREFIX="FINOPS.L3_TEMPLATE"
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"

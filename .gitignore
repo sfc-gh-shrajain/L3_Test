@@ -71,6 +71,8 @@ credentials/
 *.json
 !package.json
 .streamlit/secrets.toml
+rsa_key.p8
+rsa_key.pub
 
 # OS
 .DS_Store
